@@ -53,7 +53,6 @@ $(function() {
   const chatList = $('#chatList');
   const userList = $('#userList');
 
-  // انضمام إلى روم جديد
   function joinRoom(room) {
     currentRoom = room;
     $('#currentRoom').text("Room: " + room);
@@ -61,7 +60,6 @@ $(function() {
     socket.emit('joinRoom', room);
   }
 
-  // إرسال الرسائل
   chatInput.keypress(function(e) {
     if (e.which === 13 && this.value.trim() !== '' && currentRoom) {
       socket.emit('chat:message', { user: username, message: this.value, room: currentRoom });
@@ -70,32 +68,35 @@ $(function() {
     }
   });
 
-  // استقبال الرسائل
   socket.on('chat:message', function(data) {
     appendMessage(data.user, data.message, data.user === username, data.time);
+  });
+
+  socket.on('chat:history', function(messages) {
+    chatBox.html('');
+    messages.forEach(msg => {
+      appendMessage(msg.user, msg.message, msg.user === username, msg.time);
+    });
   });
 
   socket.on('system', function(msg) {
     chatBox.append(`<div class="text-center text-muted"><em>${msg}</em></div>`);
   });
 
-    socket.on('userList', function(users) {
+  socket.on('userList', function(users) {
     userList.html('');
     users.forEach(u => {
-        if (u !== username) {
+      if (u !== username) {
         const sorted = [username, u].sort();
         const id = `priv-${sorted[0]}-${sorted[1]}`.replace(/\s+/g, '_');
         userList.append(`<div class="chat-item" data-room="${id}">${u}</div>`);
-        }
+      }
     });
-    // إضافة كليك لفتح شات خاص
     $('#userList .chat-item').off('click').on('click', function() {
-        joinRoom($(this).data('room'));
+      joinRoom($(this).data('room'));
     });
-    });
+  });
 
-
-  // إضافة روم جروب يدوي
   chatList.html(`
     <div class="chat-item" data-room="general">General Group</div>
     <div class="chat-item" data-room="team">Team Group</div>

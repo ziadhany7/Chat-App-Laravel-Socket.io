@@ -7,7 +7,8 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 
-let users = {}; // socket.id -> username
+let users = {};                // socket.id -> username
+let roomMessages = {};         // roomName -> [ { user, message, time } ]
 
 io.on('connection', (socket) => {
   console.log(`User connected: ${socket.id}`);
@@ -23,6 +24,11 @@ io.on('connection', (socket) => {
     socket.join(roomName);
     socket.emit('system', `You joined room: ${roomName}`);
     console.log(`${users[socket.id] || socket.id} joined ${roomName}`);
+
+    // إرسال الرسائل السابقة
+    if (roomMessages[roomName]) {
+      socket.emit('chat:history', roomMessages[roomName]);
+    }
   });
 
   // استقبال وإرسال الرسائل
@@ -32,6 +38,10 @@ io.on('connection', (socket) => {
       message: data.message,
       time: new Date().toLocaleTimeString()
     };
+
+    if (!roomMessages[data.room]) roomMessages[data.room] = [];
+    roomMessages[data.room].push(messageData);
+
     io.to(data.room).emit('chat:message', messageData);
     console.log(`[${messageData.time}] (${data.room}) ${messageData.user}: ${messageData.message}`);
 
