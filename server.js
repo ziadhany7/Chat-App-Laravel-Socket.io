@@ -13,15 +13,22 @@ const io = new Server(server, {
 io.on('connection', (socket) => {
   console.log(`User connected: ${socket.id}`);
 
+  // المستخدم يختار الروم
+  socket.on('joinRoom', (roomName) => {
+    socket.join(roomName);
+    console.log(`${socket.id} joined room: ${roomName}`);
+    socket.emit('system', `You joined room: ${roomName}`);
+  });
+
+  // إرسال الرسائل داخل الروم فقط
   socket.on('chat:message', (data) => {
     const messageData = {
       user: data.user || 'Anonymous',
       message: data.message,
       time: new Date().toLocaleTimeString()
     };
-    // Send to everyone except sender
-    socket.broadcast.emit('chat:message', messageData);
-    console.log(`[${messageData.time}] ${messageData.user}: ${messageData.message}`);
+    io.to(data.room).emit('chat:message', messageData);
+    console.log(`[${messageData.time}] (${data.room}) ${messageData.user}: ${messageData.message}`);
   });
 
   socket.on('disconnect', () => {

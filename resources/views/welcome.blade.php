@@ -26,22 +26,28 @@
   <script>
     $(function() {
       const username = prompt("Enter your name:") || "Anonymous";
+      const room = prompt("Enter room name to join:") || "general";
+
       const socket = io('http://127.0.0.1:3000');
+      socket.emit('joinRoom', room);
 
       const chatBox = $('#chatBox');
       const chatInput = $('#chatInput');
 
       chatInput.keypress(function(e) {
         if (e.which === 13 && this.value.trim() !== '') {
-          socket.emit('chat:message', { user: username, message: this.value });
-          appendMessage(username, this.value, true);
+          socket.emit('chat:message', { user: username, message: this.value, room });
           this.value = '';
           return false;
         }
       });
 
       socket.on('chat:message', function(data) {
-        appendMessage(data.user, data.message, false, data.time);
+        appendMessage(data.user, data.message, data.user === username, data.time);
+      });
+
+      socket.on('system', function(msg) {
+        chatBox.append(`<div class="text-center text-muted"><em>${msg}</em></div>`);
       });
 
       function appendMessage(user, message, isOwn, time = new Date().toLocaleTimeString()) {
