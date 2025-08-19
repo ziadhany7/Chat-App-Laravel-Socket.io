@@ -10,18 +10,20 @@
     .sidebar { height: 100vh; border-right: 1px solid #ccc; overflow-y: auto; }
     .chat-box { height: 80vh; overflow-y: auto; border: 1px solid #ccc; padding: 10px; }
     .chat-input { width: 100%; padding: 8px; }
-    .message { padding: 6px; border-radius: 5px; margin-bottom: 5px; }
+    .message { padding: 6px; border-radius: 5px; margin-bottom: 5px; position: relative; }
     .message.user { background-color: #d1e7dd; }
     .message.other { background-color: #f8d7da; }
     .time { font-size: 0.8rem; color: #6c757d; float: right; }
-    .chat-item { padding: 10px; cursor: pointer; border-bottom: 1px solid #eee; }
+    .seen { font-size: 0.7rem; color: blue; position: absolute; bottom: 2px; right: 5px; }
+    .chat-item { padding: 10px; cursor: pointer; border-bottom: 1px solid #eee; position: relative; }
     .chat-item:hover { background: #f0f0f0; }
+    .badge-unread { position: absolute; top: 10px; right: 10px; background: red; color: white; padding: 2px 6px; border-radius: 10px; font-size: 0.7rem; }
   </style>
 </head>
 <body>
 <div class="container-fluid">
   <div class="row">
-    <!-- قائمة الشاتات -->
+    <!-- القائمة الجانبية -->
     <div class="col-3 sidebar">
       <h5 class="p-2">Chats</h5>
       <div id="chatList"></div>
@@ -30,7 +32,7 @@
       <div id="userList"></div>
     </div>
 
-    <!-- منطقة المحادثة -->
+    <!-- نافذة المحادثة -->
     <div class="col-9">
       <h4 class="p-2" id="currentRoom">No Room</h4>
       <div class="chat-box mb-3" id="chatBox"></div>
@@ -52,12 +54,17 @@ $(function() {
   const chatInput = $('#chatInput');
   const chatList = $('#chatList');
   const userList = $('#userList');
+  const unreadCounts = {}; // roomName -> count
 
   function joinRoom(room) {
     currentRoom = room;
+    unreadCounts[room] = 0; // تصفير العداد عند فتح الشات
+    updateUnreadUI();
     $('#currentRoom').text("Room: " + room);
     chatBox.html('');
     socket.emit('joinRoom', room);
+    // إرسال إشعار السيرفر بأننا قرأنا الرسائل
+    socket.emit('messages:seen', { room: room, user: username });
   }
 
   chatInput.keypress(function(e) {
@@ -69,13 +76,22 @@ $(function() {
   });
 
   socket.on('chat:message', function(data) {
-    appendMessage(data.user, data.message, data.user === username, data.time);
-  });
+    if (currentRoom === data.room) {
+        // فقط لو الرسالة تخص الغرفة الحالية يتم عرضها
+        appendMessage(data.id, data.user, data.message, data.user === username, data.time, data.seenBy);
+        socket.emit('messages:seen', { room: data.room, user: username });
+    } else {
+        // لو الرسالة ليست في الغرفة الحالية => زيادة عداد الغرفة فقط
+        unreadCounts[data.room] = (unreadCounts[data.room] || 0) + 1;
+        updateUnreadUI();
+    }
+});
+
 
   socket.on('chat:history', function(messages) {
     chatBox.html('');
     messages.forEach(msg => {
-      appendMessage(msg.user, msg.message, msg.user === username, msg.time);
+      appendMessage(msg.id, msg.user, msg.message, msg.user === username, msg.time, msg.seenBy);
     });
   });
 
@@ -97,6 +113,7 @@ $(function() {
     });
   });
 
+  // قائمة الرومات العامة
   chatList.html(`
     <div class="chat-item" data-room="general">General Group</div>
     <div class="chat-item" data-room="team">Team Group</div>
@@ -105,15 +122,50 @@ $(function() {
     joinRoom($(this).data('room'));
   });
 
-  function appendMessage(user, message, isOwn, time) {
+  // تحديث حالة القراءة
+  socket.on('messages:seen:update', function(data) {
+    // تعديل الرسائل المعروضة وإضافة "Seen" عند الحاجة
+    data.seenBy.forEach(msgId => {
+      $(`#msg-${msgId}`).find('.seen').remove();
+      $(`#msg-${msgId}`).append('<span class="seen">Seen</span>');
+    });
+  });
+// socket.on('messages:seen:update', function(data) {
+//   data.updatedMessages.forEach(msg => {
+//     const seenText = msg.seenBy.length > 0 ? 'Seen by: ' + msg.seenBy.join(', ') : '';
+//     $(`#msg-${msg.id}`).find('.seen').remove();
+//     if (seenText) {
+//       $(`#msg-${msg.id}`).append(`<span class="seen">${seenText}</span>`);
+//     }
+//   });
+// });
+
+
+  function appendMessage(id, user, message, isOwn, time, seenBy=[]) {
     const sideClass = isOwn ? 'user' : 'other';
-    const html = `<div class="message ${sideClass}">
+    const seenMark = (isOwn && seenBy && seenBy.length > 0) ? '<span class="seen">Seen</span>' : '';
+    const html = `<div class="message ${sideClass}" id="msg-${id}">
                     <strong>${user}:</strong> ${$('<div>').text(message).html()}
                     <span class="time">${time}</span>
+                    ${seenMark}
                   </div>`;
     chatBox.append(html);
     chatBox.scrollTop(chatBox[0].scrollHeight);
   }
+
+  function updateUnreadUI() {
+    $('.badge-unread').remove();
+    Object.keys(unreadCounts).forEach(room => {
+      if (unreadCounts[room] > 0) {
+        $(`[data-room="${room}"]`).append(`<span class="badge-unread">${unreadCounts[room]}</span>`);
+      }
+    });
+  }
+
+  // لو السيرفر طلب الانضمام القسري لغرفة
+  socket.on('forceJoin', function(room) {
+    joinRoom(room);
+  });
 });
 </script>
 </body>
