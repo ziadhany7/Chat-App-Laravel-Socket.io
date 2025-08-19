@@ -1,29 +1,35 @@
+require('dotenv').config();
 const express = require('express');
-const { Socket } = require('socket.io');
+const http = require('http');
+const { Server } = require('socket.io');
+
 const app = express();
+const server = http.createServer(app);
 
-const server = require('http').createServer(app);
-
-const io =  require('socket.io')(server, {
-    cors: {origin: '*'}
+const io = new Server(server, {
+  cors: { origin: '*' }
 });
-io.on('connection', (Socket)=>{
-    console.log("connection");
 
-    Socket.on('sendChatToServer', (message) => {
-        console.log(message);
+io.on('connection', (socket) => {
+  console.log(`User connected: ${socket.id}`);
 
-        // io.sockets.emit('sendChatToClient', message);
+  socket.on('chat:message', (data) => {
+    const messageData = {
+      user: data.user || 'Anonymous',
+      message: data.message,
+      time: new Date().toLocaleTimeString()
+    };
+    // Send to everyone except sender
+    socket.broadcast.emit('chat:message', messageData);
+    console.log(`[${messageData.time}] ${messageData.user}: ${messageData.message}`);
+  });
 
-        Socket.broadcast.emit('sendChatToClient', message);
-    });
-
-
-    Socket.on('disconnect',(socket)=>{
-        console.log('Disconnected');
-    });
+  socket.on('disconnect', () => {
+    console.log(`User disconnected: ${socket.id}`);
+  });
 });
-server.listen(3000,()=>{
-    console.log("server is running now");
 
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
 });
